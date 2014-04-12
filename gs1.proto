@@ -1,0 +1,30 @@
+package zns;
+
+message Brand {
+   optional string id = 1;
+   optional string name = 2;
+   optional string url = 3;
+}
+
+message GlobalProductClassification {
+   optional string segment = 1;
+   optional string family = 2;
+   optional string class = 3;
+   optional string brick = 4;
+}
+
+message GS1Product {
+   optional int64 global_trade_id = 1;
+   optional int64 global_company_pref = 2;
+   optional Brand brand = 3;
+   optional GlobalProductClassification gpc = 4;
+   optional string name = 5;
+   optional double amount_g = 6;
+   optional double amount_oz = 7;
+   optional double amount_ml = 8;
+   optional double amount_floz = 9;
+}
+
+message GS1ProductList {
+   repeated GS1Product entries = 1;
+}

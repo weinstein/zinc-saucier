@@ -1,0 +1,30 @@
+package zns;
+
+message Ingredient {
+   optional double amount_low = 1;
+   optional double amount_high = 2;
+   optional string unit = 3;
+   optional string name = 4;
+   optional string prep_note = 5;
+}
+
+message Recipe {
+   optional string name = 1;
+   optional int64 prep_time_min = 2;
+   optional int64 cook_time_min = 3;
+   optional double serves_low = 4;
+   optional double serves_high = 5;
+   optional string serves_unit = 6;
+
+   repeated string categories = 7;
+   repeated Ingredient ingredients = 8;
+   repeated string instructions = 9;
+}
+
+message IngredientList {
+   repeated Ingredient entries = 1;
+}
+
+message RecipeList {
+   repeated Recipe entries = 1;
+}
