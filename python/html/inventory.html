@@ -1,0 +1,61 @@
+<html>
+<head>
+<title>Kitchen Inventory</title>
+<script>
+
+var ingred_names = new Array();
+var ingred_upcs = new Array();
+
+function add_to_inventory(item) {
+   if (isNaN(item)) {
+      ingred_names.push(item);
+      var list = document.getElementById("ingred_names_list");
+      list.innerHTML = "";
+      for (var i = 0; i < ingred_names.length; ++i) {
+         list.innerHTML += ingred_names[i] + "<br>";
+      }
+   } else {
+      var upc = new Number(item);
+      ingred_upcs.push(upc);
+      var list = document.getElementById("ingred_upc_list");
+      list.innerHTML = "";
+      for (var i = 0; i < ingred_upcs.length; ++i) {
+         list.innerHTML += ingred_upcs[i].toString() + "<br>";
+      }
+   }
+}
+
+function update_inventory() {
+   var textbox = document.getElementById("user_input");
+   if (textbox.value) {
+      add_to_inventory(textbox.value);
+   }
+   textbox.value = "";
+}
+
+var ENTER_KEY = 13;
+function handle_input_key_press(e) {
+   var key = e.keyCode || e.which;
+   if (key == ENTER_KEY) {
+      update_inventory();
+   }
+}
+
+</script>
+</head>
+
+<body>
+
+<div id="ingred_names_list">
+</div>
+
+<hr>
+
+<div id="ingred_upc_list">
+</div>
+
+<hr>
+
+<input type="text" id="user_input" onkeypress="javascript:handle_input_key_press(event)"></input>
+
+</body>

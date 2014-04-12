@@ -1,18 +1,37 @@
 #!/usr/bin/python
 
+from __future__ import division
+
 import BaseHTTPServer
 import os
 import sys
 import cooking_pb2
+import gs1_pb2
 import nltk
 import gflags
 import urlparse as urlp
+import protobuf_json
+import json
+import math
+
 FLAGS = gflags.FLAGS
-
 gflags.DEFINE_integer('port', '8080', 'port to serve requests on')
-gflags.DEFINE_string('recipe_dir', '', 'directory to read recipes from')
+gflags.DEFINE_integer('max_recipes', '1000000', 'maximum recipes to keep in mem')
+gflags.DEFINE_string('recipe_file', '', 'file to read recipes from')
+gflags.DEFINE_string('product_file', '', 'file to read prods from')
 
-ingred_names_to_recipes = {}
+all_recipes_list = cooking_pb2.RecipeList()
+recipe_ingred_sets = {}
+recipe_names_to_obj = {}
+all_prods_by_gtin = {}
+
+inventory_html = ''
+
+def try_parse_int(string):
+   try:
+      return int(string)
+   except ValueError:
+      return -1
 
 def pos_tag(text):
    split = nltk.word_tokenize(text)
@@ -32,24 +51,25 @@ def recipe_from_file(fname):
    fd.close()
    return recipe
 
-def map_ingred_names(src_dir):
-   name_to_recipes = {}
+def map_ingred_names(recipe_list):
+   recipe_ingred_sets = {}
+   name_to_obj = {}
    n = 0
-   for fname in list_from_dir(src_dir):
-      if n > 200:
+   for recipe in recipe_list.entries:
+      n += 1
+      if n > FLAGS.max_recipes:
          break
-      recipe = recipe_from_file(fname)
+      print 'n=',n,' recipe=',recipe.name
+      ingred_set = set()
       for ingredient in recipe.ingredients:
          tags = pos_tag(ingredient.name)
          for (word, pos) in tags:
             if word.isalpha() and (pos == 'NN' or pos == 'NNS' or pos == 'NNP' or pos == 'NNPS'):
-               matching_recipes = name_to_recipes.get(word)
-               if matching_recipes is None:
-                  name_to_recipes[word] = [recipe]
-               else:
-                  name_to_recipes[word].append(recipe)
-      n += 1
-   return name_to_recipes
+               ingred_set.add(word)
+      if len(ingred_set) > 0:
+         recipe_ingred_sets[recipe.name] = ingred_set
+         name_to_obj[recipe.name] = recipe
+   return recipe_ingred_sets, name_to_obj
 
 def read_recipes_from_dir(directory):
    recipe_list = []
@@ -62,56 +82,115 @@ def read_recipes_from_dir(directory):
       recipe_list.append(recipe)
    return recipe_list
 
+def read_recipes_from_file(fname):
+   fd = open(fname, 'r')
+   recipe_list = cooking_pb2.RecipeList()
+   recipe_list.ParseFromString(fd.read())
+   fd.close()
+   return recipe_list
+
+def read_prods_from_file(fname):
+   fd = open(fname, 'r')
+   prod_list = gs1_pb2.GS1ProductList()
+   prod_list.ParseFromString(fd.read())
+   fd.close()
+   return prod_list
+
+def map_prod_gtin(prod_list):
+   prods_by_gtin = {}
+   for prod in prod_list.entries:
+      if prod.global_trade_id is None:
+         continue
+      prods_by_gtin[int(prod.global_trade_id)] = prod
+   return prods_by_gtin
+
+def lookup_gtin(gtin):
+   product_info = all_prods_by_gtin.get(gtin)
+   return product_info
+
 def handle_with_html(s, html_text):
    s.send_response(200)
    s.send_header("Content-type", "text/html")
    s.end_headers()
    s.wfile.write(html_text)
 
+def handle_with_json(s, json_text):
+   s.send_response(200)
+   s.send_header("Content-type", "application/json")
+   s.end_headers()
+   s.wfile.write(json_text)
+
+def handle_prod_info(s):
+   qs = urlp.parse_qs(urlp.urlparse(s.path).query)
+   gtin = qs.get('gtin')
+   if gtin is None:
+      handle_with_json(s, '{ }')
+      return
+   else:
+      gtin = try_parse_int(gtin[0])
+   print 'gtin:',gtin
+   product_info = lookup_gtin(gtin)
+   if product_info is not None:
+      print 'found:',product_info.name
+      handle_with_json(s, json.dumps(protobuf_json.pb2json(product_info), indent=4))
+   else:
+      print 'not found'
+      handle_with_json(s, '{ }')
+
+def handle_inventory(s):
+   handle_with_html(s, inventory_html)
+
 def handle_recipe_req(s):
    qs = urlp.parse_qs(urlp.urlparse(s.path).query)
-   ingred_strs = qs['ingreds']
-   print 'ingreds:', ingred_strs
+   ingred_strs = qs.get('ingreds')
+   count = qs.get('count')
+   print 'qs:',qs
+
    if ingred_strs is None:
+      handle_with_json(s, '{ }')
       return
+   if count is None:
+      count = 5
+   else:
+      count = try_parse_int(count[0])
+   if count < 0 or count > 128:
+      count = 128
+   print 'ingreds:', ingred_strs
+   print 'count:', count
+
    ingred_set = set()
    for ingred_str in ingred_strs:
-      ingred_set.add(ingred_str)
-   recipe_matches = set()
-   recipe_name_to_obj = {}
-   for ingred_str in ingred_strs:
-      recipes = ingred_names_to_recipes.get(ingred_str)
-      if recipes is None:
-         continue
-      for recipe in recipes:
-         recipe_matches.add(recipe.name)
-         recipe_name_to_obj[recipe.name] = recipe
+      tags = pos_tag(ingred_str)
+      for (word, pos) in tags:
+         if word.isalpha() and (pos == 'NN' or pos == 'NNS' or pos == 'NNP' or pos == 'NNPS'):
+            ingred_set.add(word)
+   if ingred_set is None:
+      handle_with_json(s, '{ }')
+      return
+
    recipe_scores = {}
-   for recipe in recipe_matches:
-      recipe_ingred_set = set()
-      for ingred in recipe_name_to_obj[recipe].ingredients:
-         tags = pos_tag(ingred.name)
-         for (word, pos) in tags:
-            if word.isalpha() and (pos == 'NN' or pos == 'NNS' or pos == 'NNP' or pos == 'NNPS'):
-               recipe_ingred_set.add(word)
-      recipe_score = len(recipe_ingred_set.intersection(ingred_set)) / len(recipe_ingred_set) / len(ingred_set)
-      recipe_scores[recipe] = recipe_score
+   for recipe in all_recipes_list.entries:
+      recipe_ingred_set = recipe_ingred_sets.get(recipe.name)
+      if recipe_ingred_set is None:
+         continue
+      recipe_score = len(recipe_ingred_set.intersection(ingred_set)) / len(recipe_ingred_set.union(ingred_set))
+      recipe_scores[recipe.name] = recipe_score
    
-   html_text = '<html><title>Results</title>'
+   dicts_ret = []
    n = 0
    for recipe in sorted(recipe_scores, key=recipe_scores.get, reverse=True):
-      if n > 25:
+      if n > count:
          break
-      html_text += '<div id=' + str(n) + '>'
-      html_text += str(recipe_name_to_obj[recipe])
-      html_text += '</div><br>'
+      print 'recipe', recipe, '\n  score', recipe_scores[recipe]
+      dicts_ret.append(protobuf_json.pb2json(recipe_names_to_obj[recipe]))
       n += 1
-   html_text += '</html>'
-   handle_with_html(s, html_text)
+   handle_with_json(s, json.dumps(dicts_ret, indent=4))
 
 class ZnsReqHandler(BaseHTTPServer.BaseHTTPRequestHandler):
    registered_handlers = {
-      "/recipes": handle_recipe_req,
+      "/recipes.json": handle_recipe_req,
+      "/product_info.json": handle_prod_info,
+      "/inventory": handle_inventory
    }
 
    def do_HEAD(s):
@@ -138,14 +217,28 @@ if __name__ == '__main__':
 
    sys.argv = FLAGS(sys.argv)
    
-   if not FLAGS.recipe_dir:
-      print 'Must specify --recipe_dir'
+   if not FLAGS.recipe_file:
+      print 'Must specify --recipe_file'
+      exit()
+   if not FLAGS.product_file:
+      print 'Must specify --product_file'
       exit()
       
-   print 'Mapping ingredient names'
-   ingred_names_to_recipes = map_ingred_names(FLAGS.recipe_dir)
+   print 'Reading GS1 prods'
+   all_prods = read_prods_from_file(FLAGS.product_file)
+   print 'Mapping prods'
+   all_prods_by_gtin = map_prod_gtin(all_prods)
+
+   print 'Reading recipes'
+   all_recipes_list = read_recipes_from_file(FLAGS.recipe_file)
+   print 'Mapping ingred names'
+   recipe_ingred_sets, recipe_names_to_obj = map_ingred_names(all_recipes_list)
    
    print 'Starting request handler'
+   inv_fd = open('html/inventory.html', 'r')
+   inventory_html = inv_fd.read()
+   inv_fd.close()
+
    server_class = BaseHTTPServer.HTTPServer
    httpd = server_class(('', FLAGS.port), ZnsReqHandler)
    try:
