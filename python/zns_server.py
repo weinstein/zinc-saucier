@@ -25,8 +25,6 @@ recipe_ingred_sets = {}
 recipe_names_to_obj = {}
 all_prods_by_gtin = {}
 
-inventory_html = ''
-
 def try_parse_int(string):
    try:
       return int(string)
@@ -51,6 +49,18 @@ def recipe_from_file(fname):
    fd.close()
    return recipe
 
+def extract_ingred_name(name):
+   result = []
+   tags = pos_tag(name)
+   for (word, pos) in tags:
+      if word.isalpha() and (pos == 'NN' or pos == 'NNS' or pos == 'NNP' or pos == 'NNPS'):
+         result.append(word)
+   if not result:
+      for (word, pos) in tags:
+         if word.isalpha() and (pos == 'JJ' or pos == 'VBZ' or pos == 'PRP$'):
+            result.append(word)
+   return result
+
 def map_ingred_names(recipe_list):
    recipe_ingred_sets = {}
    name_to_obj = {}
@@ -62,10 +72,12 @@ def map_ingred_names(recipe_list):
       print 'n=',n,' recipe=',recipe.name
       ingred_set = set()
       for ingredient in recipe.ingredients:
-         tags = pos_tag(ingredient.name)
-         for (word, pos) in tags:
-            if word.isalpha() and (pos == 'NN' or pos == 'NNS' or pos == 'NNP' or pos == 'NNPS'):
-               ingred_set.add(word)
+         ingred_names = extract_ingred_name(ingredient.name)
+         if ingred_names is None or not ingred_names:
+            continue
+         for ingred_name in ingred_names:
+            if ingred_name is not None:
+               ingred_set.add(ingred_name)
       if len(ingred_set) > 0:
          recipe_ingred_sets[recipe.name] = ingred_set
          name_to_obj[recipe.name] = recipe
@@ -122,32 +134,36 @@ def handle_with_json(s, json_text):
 
 def handle_prod_info(s):
    qs = urlp.parse_qs(urlp.urlparse(s.path).query)
-   gtin = qs.get('gtin')
-   if gtin is None:
-      handle_with_json(s, '{ }')
+   gtins = qs.get('gtin')
+   if gtins is None or not gtins:
+      handle_with_json(s, '[]')
       return
-   else:
-      gtin = try_parse_int(gtin[0])
-   print 'gtin:',gtin
-   product_info = lookup_gtin(gtin)
-   if product_info is not None:
-      print 'found:',product_info.name
-      handle_with_json(s, json.dumps(protobuf_json.pb2json(product_info), indent=4))
-   else:
-      print 'not found'
-      handle_with_json(s, '{ }')
+   dict_ret = []
+   for gtin in gtins:
+      gtin = try_parse_int(gtin)
+      print 'gtin:',gtin
+      product_info = lookup_gtin(gtin)
+      if product_info is not None:
+         print 'found:',product_info.name
+         dict_ret.append(protobuf_json.pb2json(product_info))
+      else:
+         print 'not found'
+   handle_with_json(s, json.dumps(dict_ret, indent=4))
 
 def handle_inventory(s):
+   inv_fd = open('html/inventory.html', 'r')
+   inventory_html = inv_fd.read()
+   inv_fd.close()
    handle_with_html(s, inventory_html)
 
 def handle_recipe_req(s):
    qs = urlp.parse_qs(urlp.urlparse(s.path).query)
-   ingred_strs = qs.get('ingreds')
+   ingred_strs = qs.get('ingred')
    count = qs.get('count')
    print 'qs:',qs
 
    if ingred_strs is None:
-      handle_with_json(s, '{ }')
+      handle_with_json(s, '[]')
       return
    if count is None:
       count = 5
@@ -160,12 +176,14 @@ def handle_recipe_req(s):
 
    ingred_set = set()
    for ingred_str in ingred_strs:
-      tags = pos_tag(ingred_str)
-      for (word, pos) in tags:
-         if word.isalpha() and (pos == 'NN' or pos == 'NNS' or pos == 'NNP' or pos == 'NNPS'):
-            ingred_set.add(word)
+      ingred_names = extract_ingred_name(ingred_str)
+      if ingred_names is None or not ingred_names:
+         continue
+      for ingred_name in ingred_names:
+         if ingred_name is not None:
+            ingred_set.add(ingred_name)
    if ingred_set is None:
-      handle_with_json(s, '{ }')
+      handle_with_json(s, '[]')
       return
 
    recipe_scores = {}
@@ -235,9 +253,6 @@ if __name__ == '__main__':
    recipe_ingred_sets, recipe_names_to_obj = map_ingred_names(all_recipes_list)
    
    print 'Starting request handler'
-   inv_fd = open('html/inventory.html', 'r')
-   inventory_html = inv_fd.read()
-   inv_fd.close()
 
    server_class = BaseHTTPServer.HTTPServer
    httpd = server_class(('', FLAGS.port), ZnsReqHandler)

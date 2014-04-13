@@ -1,10 +1,33 @@
 <html>
 <head>
+
 <title>Kitchen Inventory</title>
+
+<style>
+
+table {
+   border:1px solid black;
+   margin:2px;
+   padding:2px;
+   width:100%;
+   height: 66%;
+}
+th,td {
+   border:1px solid black;
+   margin:2px;
+   padding:2px;
+   width:50%;
+   height:100%;
+   vertical-align: top;
+}
+
+</style>
+
 <script>
 
 var ingred_names = new Array();
 var ingred_upcs = new Array();
+var suggested_recipes = new Array();
 
 function add_to_inventory(item) {
    if (isNaN(item)) {
@@ -41,21 +64,83 @@ function handle_input_key_press(e) {
    }
 }
 
+function display_suggested_recipes() {
+   var recipes = document.getElementById("recipe_suggestions");
+   recipes.innerHTML = "";
+   for (var i = 0; i < suggested_recipes.length; ++i) {
+      var json_recipe = suggested_recipes[i];
+      recipes.innerHTML += "<div id=\"recipe\" name=\"" + json_recipe.name + "\">" + json_recipe.name + "<br>\n";
+      for (var j = 0; j < json_recipe.ingredients.length; ++j) {
+         recipes.innerHTML += "<div id=\"ingredient\" name=\"" + json_recipe.ingredients[j].name + "\">"
+         recipes.innerHTML += json_recipe.ingredients[j].name + "</div><br>\n";
+      }
+      recipes.innerHTML += "</div><br>\n";
+   }
+}
+
+function load_json_recipes() {
+   var path = "recipes.json?count=5";
+   for (var i = 0; i < ingred_names.length; ++i) {
+      path += "&ingred=" + ingred_names[i];
+   }
+   http_req = new XMLHttpRequest();
+   http_req.onreadystatechange = function() {
+      if (http_req.readyState == 4) {
+         suggested_recipes = new Array();
+         var jsonObjs = JSON.parse(http_req.responseText);
+         for (var j = 0; j < jsonObjs.length; ++j) {
+            suggested_recipes.push(jsonObjs[j]);
+         }
+         display_suggested_recipes();
+      }
+   }
+   http_req.open("GET", path, true);
+   http_req.send();
+}
+
+function load_json_prod_info() {
+   var path = "product_info.json?";
+   for (var i = 0; i < ingred_upcs.length; ++i) {
+      if (i > 0) {
+         path += "&";
+      }
+      path += "gtin=" + ingred_upcs[i].toString();
+   }
+   http_req = new XMLHttpRequest();
+   http_req.onreadystatechange = function() {
+      if (http_req.readyState == 4) {
+         var jsonObjs = JSON.parse(http_req.responseText);
+         for (var j = 0; j < jsonObjs.length; ++j) {
+            var jsonObj = jsonObjs[j];
+            ingred_names.push(jsonObj.name);
+         }
+         load_json_recipes();
+      }
+   }
+   http_req.open("GET", path, true);
+   http_req.send();
+}
+
 </script>
 </head>
 
 <body>
 
-<div id="ingred_names_list">
-</div>
+<table><tr>
 
-<hr>
+<td><div id="ingred_names_list">
+</div></td>
 
-<div id="ingred_upc_list">
-</div>
+<td><div id="ingred_upc_list">
+</div></td>
 
-<hr>
+</tr></table>
 
 <input type="text" id="user_input" onkeypress="javascript:handle_input_key_press(event)"></input>
+
+<button onclick="javascript:load_json_prod_info()">Get Suggestions</button>
+
+<div id="recipe_suggestions">
+</div>
 
 </body>
