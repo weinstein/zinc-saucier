@@ -80,9 +80,14 @@ function redraw_recipe(recipe_json) {
    var html_text = "";
    html_text += "<div class=\"recipe_name label_box\">" + recipe_json.name + "</div>";
    for (var i = 0; i < recipe_json.ingredients.length; ++i) {
-      html_text += "<div>";
-      html_text += recipe_json.ingredients[i].amount_high.toString() + " " + recipe_json.ingredients[i].unit + " ";
-      html_text += "<div class=\"ingredient_name\">" + recipe_json.ingredients[i].name + "</div>";
+      html_text += "<div class=\"ingredient_name\">";
+      if (recipe_json.ingredients[i].amount_high) {
+         html_text += recipe_json.ingredients[i].amount_high + " ";
+      }
+      if (recipe_json.ingredients[i].unit) {
+         html_text += recipe_json.ingredients[i].unit + " ";
+      }
+      html_text += recipe_json.ingredients[i].name;
       html_text += "</div>";
    }
 
@@ -105,12 +110,10 @@ function load_json_recipe() {
    http_req.send();
 }
 
-load_json_recipe();
-
 </script>
 </head>
 
-<body>
+<body onload="javascript:load_json_recipe()">
 
 <div class="output_box" id="recipe_div">
 </div>

@@ -1,7 +1,7 @@
 <html>
 <head>
 
-<title>Kitchen Inventory</title>
+<title>Zinc Saucier</title>
 
 <style>
 
@@ -28,13 +28,19 @@ th,td {
    margin-top: 16px;
 }
 
-div .recipe_name {
-   font-size: 18px;
+div {
+   background-color: #FFFFFF;
 }
 
-div .ingredient_name {
+.recipe_name {
+   font-size: 18px;
+   opacity: 1.0;
+}
+
+.ingredient_name {
    font-size: 16px;
    padding-left: 20px;
+   opacity: 0.5;
 }
 
 img {
@@ -50,6 +56,17 @@ img {
    float: right;
    width=100%;
    height=100%;
+}
+
+.page_footer {
+   position: absolute;
+   bottom: 0px;
+   width: 300px;
+   right: 0px;
+   float: left;
+   background-color: #FFFFFF;
+   border-radius: 5px;
+   padding: 4px;
 }
 
 .label_box {
@@ -106,7 +123,7 @@ function clear_ingreds() {
    document.getElementById("ingred_names_list").innerHTML = "";
    document.getElementById("ingred_upc_list").innerHTML = "";
    document.getElementById("recipe_suggestions").innerHTML = "";
-   ocument.getElementById("user_input").value = "";
+   document.getElementById("user_input").value = "";
    document.getElementById("saved_recipes").innerHTML = "";
 }
 
@@ -246,6 +263,8 @@ function display_suggested_recipes() {
       html_text += "</div><br>";
    }
    recipes.innerHTML = html_text;
+   var footer = document.getElementById("footer_quote");
+   footer.innerHTML = "";
 }
 
 function load_json_recipes() {
@@ -282,7 +301,14 @@ function load_json_prod_info() {
          var jsonObjs = JSON.parse(http_req.responseText);
          for (var j = 0; j < jsonObjs.length; ++j) {
             var jsonObj = jsonObjs[j];
-            ingred_names.push(jsonObj.name);
+            var name = "";
+            if (jsonObj.name) {
+               name += jsonObj.name + " ";
+            }
+            if (jsonObj.brand && jsonObj.brand.name) {
+               name += jsonObj.brand.name;
+            }
+            ingred_names.push(name);
          }
          load_json_recipes();
       }
@@ -349,6 +375,17 @@ function load_json_serendipity() {
 
 <div id="recipe_suggestions" class="output_box">
 </div>
+
+<div id = "footer_quote">
+<div class="page_footer">
+"That is why I decline the title of Iron Cook, and accept only the lesser title of Zinc Saucier, which I just made up. Also, it comes with double prize money." --Bender
+</div>
+</div>
+
+<!--
+   If it's chicken, chicken a la king. If it's fish, fish a la king.
+   If it's turkey, fish a la king.
+-->
 
 </body>
 
