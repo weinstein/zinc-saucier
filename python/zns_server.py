@@ -396,7 +396,7 @@ if __name__ == '__main__':
    print 'Starting request handler'
 
    server_class = BaseHTTPServer.HTTPServer
-   httpd = server_class(('', FLAGS.port), ZnsReqHandler)
+   httpd = server_class(('0.0.0.0', FLAGS.port), ZnsReqHandler)
    try:
       httpd.serve_forever()
    except KeyboardInterrupt:
