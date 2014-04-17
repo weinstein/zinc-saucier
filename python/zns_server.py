@@ -8,27 +8,26 @@ import BaseHTTPServer
 import os
 import sys
 import cooking_pb2
-import gs1_pb2
 import nltk
 import gflags
 import urlparse as urlp
 import protobuf_json
 import json
 import math
-from sklearn import linear_model
+import pylru
 
 FLAGS = gflags.FLAGS
 gflags.DEFINE_integer('port', '8080', 'port to serve requests on')
-gflags.DEFINE_integer('max_recipes', '1000000', 'maximum recipes to keep in mem')
-gflags.DEFINE_string('recipe_file', '', 'file to read recipes from')
-gflags.DEFINE_string('product_file', '', 'file to read prods from')
+gflags.DEFINE_integer('cache_size', '1024', 'keep a cache of the LRU recipes')
+gflags.DEFINE_string('recipe_metadata', '', 'file to load metadata proto')
+gflags.DEFINE_string('recipe_dir', '', 'dir containing recipe files <id>.bin')
+gflags.DEFINE_string('ingredient_vocab', '', 'file to load ingred vocab from')
+gflags.DEFINE_string('category_vocab', '', 'file to load category vocab from')
 
-all_recipes_list = cooking_pb2.RecipeList()
-recipe_ingred_sets = {}
-recipe_id_to_obj = {}
-all_prods_by_gtin = {}
-all_categories_dict = {}
-all_ingredients_dict = {}
+metadata = cooking_pb2.CookbookMetadata()
+ingredient_vocab = set()
+category_vocab = set()
+recipe_cache = None
 
 def try_parse_int(string):
    try:
@@ -40,21 +39,25 @@ def pos_tag(text):
    split = nltk.word_tokenize(text)
    return nltk.pos_tag(split)
 
-def list_from_dir(directory):
-   file_list = []
-   for f in os.listdir(directory):
-      fname = os.path.join(directory, f)
-      file_list.append(fname)
-   return file_list
-
-def recipe_from_file(fname):
+def read_recipe(fname):
    fd = open(fname, 'r')
+   if not fd:
+      return None
    recipe = cooking_pb2.Recipe()
    recipe.ParseFromString(fd.read())
    fd.close()
    return recipe
 
-def extract_ingred_name(name):
+def read_recipe_with_id(iden):
+   if recipe_cache is not None and (iden in recipe_cache):
+      recipe = recipe_cache[iden]
+      return recipe
+   else:
+      recipe = read_recipe(os.path.join(FLAGS.recipe_dir, str(iden) + '.bin'))
+      recipe_cache[iden] = recipe
+      return recipe
+
+def extract_ingred_names(name):
    result = []
    tags = pos_tag(name)
    for (word, pos) in tags:
@@ -64,73 +67,26 @@ def extract_ingred_name(name):
       for (word, pos) in tags:
          if word.isalpha() and (pos == 'JJ' or pos == 'VBZ' or pos == 'PRP$'):
             result.append(word)
+   if not result:
+      if name:
+         result.append(name)
    return result
 
-def map_ingred_names(recipe_list):
-   recipe_ingred_sets = {}
-   id_to_obj = {}
-   all_cats = set()
-   all_ingreds = set()
-   n = 0
-   for recipe in recipe_list.entries:
-      id_to_obj[n] = recipe
-      if n > FLAGS.max_recipes:
-         break
-      print 'n=',n,' recipe=',recipe.name
-      ingred_set = set()
-      for ingredient in recipe.ingredients:
-         ingred_names = extract_ingred_name(ingredient.name)
-         if ingred_names is None or not ingred_names:
-            continue
-         for ingred_name in ingred_names:
-            if ingred_name is not None:
-               ingred_set.add(ingred_name)
-      if len(ingred_set) > 0:
-         recipe_ingred_sets[n] = ingred_set
-         all_ingreds = all_ingreds.union(ingred_set)
-
-      for cat in recipe.categories:
-         all_cats.add(cat)
-
-      n += 1
-   return recipe_ingred_sets, id_to_obj, list(all_cats), list(all_ingreds)
-
-def read_recipes_from_dir(directory):
-   recipe_list = []
-   for f in os.listdir(directory):
-      fname = os.path.join(directory, f)
-      fd = open(fname, 'r')
-      recipe = cooking_pb2.Recipe()
-      fd.close()
-      recipe.ParseFromString(fd.read())
-      recipe_list.append(recipe)
-   return recipe_list
-
-def read_recipes_from_file(fname):
+def read_metadata(fname):
    fd = open(fname, 'r')
-   recipe_list = cooking_pb2.RecipeList()
-   recipe_list.ParseFromString(fd.read())
+   if not fd:
+      return None
+   meta = cooking_pb2.CookbookMetadata()
+   meta.ParseFromString(fd.read())
    fd.close()
-   return recipe_list
+   return meta
 
-def read_prods_from_file(fname):
-   fd = open(fname, 'r')
-   prod_list = gs1_pb2.GS1ProductList()
-   prod_list.ParseFromString(fd.read())
-   fd.close()
-   return prod_list
-
-def map_prod_gtin(prod_list):
-   prods_by_gtin = {}
-   for prod in prod_list.entries:
-      if prod.global_trade_id is None:
-         continue
-      prods_by_gtin[int(prod.global_trade_id)] = prod
-   return prods_by_gtin
-
-def lookup_gtin(gtin):
-   product_info = all_prods_by_gtin.get(gtin)
-   return product_info
+def read_vocab(fname):
+   vocab = set()
+   with open(fname, 'r') as f:
+      for line in f.readlines():
+         vocab.add(line)
+   return vocab
 
 def handle_with_html(s, html_text):
    s.send_response(200)
@@ -150,23 +106,23 @@ def handle_with_json(s, json_text):
    s.end_headers()
    s.wfile.write(json_text)
 
-def handle_prod_info(s):
-   qs = urlp.parse_qs(urlp.urlparse(s.path).query)
-   gtins = qs.get('gtin')
-   if gtins is None or not gtins:
-      handle_with_json(s, '[]')
-      return
-   dict_ret = []
-   for gtin in gtins:
-      gtin = try_parse_int(gtin)
-      print 'gtin:',gtin
-      product_info = lookup_gtin(gtin)
-      if product_info is not None:
-         print 'found:',product_info.name
-         dict_ret.append(protobuf_json.pb2json(product_info))
-      else:
-         print 'not found'
-   handle_with_json(s, json.dumps(dict_ret, indent=4))
+#def handle_prod_info(s):
+#   qs = urlp.parse_qs(urlp.urlparse(s.path).query)
+#   gtins = qs.get('gtin')
+#   if gtins is None or not gtins:
+#      handle_with_json(s, '[]')
+#      return
+#   dict_ret = []
+#   for gtin in gtins:
+#      gtin = try_parse_int(gtin)
+#      print 'gtin:',gtin
+#      product_info = lookup_gtin(gtin)
+#      if product_info is not None:
+#         print 'found:',product_info.name
+#         dict_ret.append(protobuf_json.pb2json(product_info))
+#      else:
+#         print 'not found'
+#   handle_with_json(s, json.dumps(dict_ret, indent=4))
 
 def handle_recipe_info_json(s):
    qs = urlp.parse_qs(urlp.urlparse(s.path).query)
@@ -175,10 +131,9 @@ def handle_recipe_info_json(s):
       handle_with_json(s, '{}')
       return
    recipe_id = try_parse_int(recipe_id[0])
-   recipe = recipe_id_to_obj.get(recipe_id)
-   if recipe is not None:
+   if recipe_id >= 0 and recipe_id < len(metadata.recipes):
+      recipe = read_recipe_with_id(recipe_id)
       pb_dict = protobuf_json.pb2json(recipe)
-      pb_dict['id'] = recipe_id
       handle_with_json(s, json.dumps(pb_dict, indent=4))
    else:
       handle_with_json(s, '{}')
@@ -201,88 +156,88 @@ def handle_inventory(s):
    inv_fd.close()
    handle_with_html(s, inventory_html)
 
-def ingred_name_to_feature(name):
-   ret = all_ingredients_dict.get(name)
-   if ret is None:
-      return None
-   else:
-      return ret + len(all_categories_dict)
-
-def cat_name_to_feature(name):
-   return all_categories_dict.get(name)
-
-def get_num_features():
-   return len(all_categories_dict) + len(all_ingredients_dict)
-
-def get_feature_vec(recipe):
-   features = [0] * get_num_features()
-   for ingredient in recipe.ingredients:
-      ingred_names = extract_ingred_name(ingredient.name)
-      if ingred_names is not None and ingred_names:
-         for ingred_name in ingred_names:
-            fid = ingred_name_to_feature(ingred_name)
-            if fid is None:
-               continue
-            features[fid] = 1
-   for category in recipe.categories:
-      fid = cat_name_to_feature(category)
-      if fid is None:
-         continue
-      features[fid] = 1
-   return features
-
-def form_feature_matr(recipes):
-   A = []
-   for recipe in recipes:
-      feature_vec = get_feature_vec(recipe)
-      A.append(feature_vec)
-   return A
-
-def handle_serendipity(s):
-   qs = urlp.parse_qs(urlp.urlparse(s.path).query)
-   likes = qs.get('like')
-   dislikes = qs.get('dislike')
-   print 'qs:',qs
-   if likes is None or not likes:
-      if dislikes is None or not dislikes:
-         handle_with_json(s, '[]')
-         return
-
-   like_recipes = []
-   likes_set = set()
-   for rid in likes:
-      rid = try_parse_int(rid)
-      if rid not in likes_set:
-         likes_set.add(rid)
-         like_recipes.append(recipe_id_to_obj[rid])
-
-   dislike_recipes = []
-   dislikes_set = set()
-   for rid in dislikes:
-      rid = try_parse_int(rid)
-      if rid not in dislikes_set:
-         dislikes_set.add(rid)
-         dislike_recipes.append(recipe_id_to_obj[rid])
-
-   data_matr = form_feature_matr(like_recipes + dislike_recipes)
-   label_matr = [1] * len(like_recipes) + [0] * len(dislike_recipes)
-   clf = linear_model.Perceptron()
-   clf.fit(data_matr, label_matr)
-
-   dicts_ret = []
-   recipe_id = 0
-   for recipe in all_recipes_list.entries:
-      if recipe_id in likes_set or recipe_id in dislikes_set:
-         recipe_id += 1
-         continue
-      feature_vec = get_feature_vec(recipe)
-      classification = clf.predict(feature_vec)
-      if classification[0] == 1:
-         pb_dict = protobuf_json.pb2json(recipe)
-         pb_dict['id'] = recipe_id
-         dicts_ret.append(pb_dict)
-      recipe_id += 1
-   handle_with_json(s, json.dumps(dicts_ret, indent=4))
+#def ingred_name_to_feature(name):
+#   ret = all_ingredients_dict.get(name)
+#   if ret is None:
+#      return None
+#   else:
+#      return ret + len(all_categories_dict)
+#
+#def cat_name_to_feature(name):
+#   return all_categories_dict.get(name)
+#
+#def get_num_features():
+#   return len(all_categories_dict) + len(all_ingredients_dict)
+#
+#def get_feature_vec(recipe):
+#   features = [0] * get_num_features()
+#   for ingredient in recipe.ingredients:
+#      ingred_names = extract_ingred_name(ingredient.name)
+#      if ingred_names is not None and ingred_names:
+#         for ingred_name in ingred_names:
+#            fid = ingred_name_to_feature(ingred_name)
+#            if fid is None:
+#               continue
+#            features[fid] = 1
+#   for category in recipe.categories:
+#      fid = cat_name_to_feature(category)
+#      if fid is None:
+#         continue
+#      features[fid] = 1
+#   return features
+#
+#def form_feature_matr(recipes):
+#   A = []
+#   for recipe in recipes:
+#      feature_vec = get_feature_vec(recipe)
+#      A.append(feature_vec)
+#   return A
+#
+#def handle_serendipity(s):
+#   qs = urlp.parse_qs(urlp.urlparse(s.path).query)
+#   likes = qs.get('like')
+#   dislikes = qs.get('dislike')
+#   print 'qs:',qs
+#   if likes is None or not likes:
+#      if dislikes is None or not dislikes:
+#         handle_with_json(s, '[]')
+#         return
+#
+#   like_recipes = []
+#   likes_set = set()
+#   for rid in likes:
+#      rid = try_parse_int(rid)
+#      if rid not in likes_set:
+#         likes_set.add(rid)
+#         like_recipes.append(recipe_id_to_obj[rid])
+#
+#   dislike_recipes = []
+#   dislikes_set = set()
+#   for rid in dislikes:
+#      rid = try_parse_int(rid)
+#      if rid not in dislikes_set:
+#         dislikes_set.add(rid)
+#         dislike_recipes.append(recipe_id_to_obj[rid])
+#
+#   data_matr = form_feature_matr(like_recipes + dislike_recipes)
+#   label_matr = [1] * len(like_recipes) + [0] * len(dislike_recipes)
+#   clf = linear_model.Perceptron()
+#   clf.fit(data_matr, label_matr)
+#
+#   dicts_ret = []
+#   recipe_id = 0
+#   for recipe in all_recipes_list.entries:
+#      if recipe_id in likes_set or recipe_id in dislikes_set:
+#         recipe_id += 1
+#         continue
+#      feature_vec = get_feature_vec(recipe)
+#      classification = clf.predict(feature_vec)
+#      if classification[0] == 1:
+#         pb_dict = protobuf_json.pb2json(recipe)
+#         pb_dict['id'] = recipe_id
+#         dicts_ret.append(pb_dict)
+#      recipe_id += 1
+#   handle_with_json(s, json.dumps(dicts_ret, indent=4))
 
 def handle_recipe_req(s):
    qs = urlp.parse_qs(urlp.urlparse(s.path).query)
@@ -304,35 +259,28 @@ def handle_recipe_req(s):
 
    ingred_set = set()
    for ingred_str in ingred_strs:
-      ingred_names = extract_ingred_name(ingred_str)
-      if ingred_names is None or not ingred_names:
-         continue
-      for ingred_name in ingred_names:
-         if ingred_name is not None:
-            ingred_set.add(ingred_name)
+      ingred_names = extract_ingred_names(ingred_str)
+      ingred_set = ingred_set.union(set([w.lower() for w in ingred_names if w]))
+
    if ingred_set is None or not ingred_set:
       handle_with_json(s, '[]')
       return
 
    recipe_scores = {}
-   recipe_id = 0
-   for recipe in all_recipes_list.entries:
-      recipe_ingred_set = recipe_ingred_sets.get(recipe_id)
-      if recipe_ingred_set is None:
-         recipe_id += 1
-         continue
-      recipe_score = len(recipe_ingred_set.intersection(ingred_set))**2 / len(recipe_ingred_set)
-      recipe_scores[recipe_id] = recipe_score
-      recipe_id += 1
+   for recipe in metadata.recipes:
+      recipe_ingred_set = set([w.lower() for w in recipe.ingredient_vocab if w])
+      if recipe_ingred_set:
+         recipe_score = len(recipe_ingred_set.intersection(ingred_set))**2 / len(recipe_ingred_set)
+         recipe_scores[recipe.iden] = recipe_score
    
    dicts_ret = []
-   n = 0
+   n = 1
    for recipe_id in sorted(recipe_scores, key=recipe_scores.get, reverse=True):
       if n > count:
          break
-      print 'recipe', recipe_id_to_obj[recipe_id].name, '\n  score', recipe_scores[recipe_id]
-      pb_dict = protobuf_json.pb2json(recipe_id_to_obj[recipe_id])
-      pb_dict['id'] = recipe_id
+      recipe = read_recipe_with_id(recipe_id)
+      print 'recipe', recipe.name, '\n  score', recipe_scores[recipe_id]
+      pb_dict = protobuf_json.pb2json(recipe)
       dicts_ret.append(pb_dict)
       n += 1
    handle_with_json(s, json.dumps(dicts_ret, indent=4))
@@ -340,9 +288,9 @@ def handle_recipe_req(s):
 class ZnsReqHandler(BaseHTTPServer.BaseHTTPRequestHandler):
    registered_handlers = {
       "/recipes.json": handle_recipe_req,
-      "/product_info.json": handle_prod_info,
+#      "/product_info.json": handle_prod_info,
       "/recipe_info.json": handle_recipe_info_json,
-      "/inventory": handle_inventory,
+      "/": handle_inventory,
       "/recipe_info": handle_recipe_info,
       "/bender.png": handle_bender_png,
 #      "/serendipity.json": handle_serendipity,
@@ -372,27 +320,27 @@ if __name__ == '__main__':
 
    sys.argv = FLAGS(sys.argv)
    
-   if not FLAGS.recipe_file:
-      print 'Must specify --recipe_file'
+   if not FLAGS.recipe_dir:
+      print 'Must specify --recipe_dir'
       exit()
-   if not FLAGS.product_file:
-      print 'Must specify --product_file'
+   if not FLAGS.recipe_metadata:
+      print 'Must specify --recipe_metadata'
       exit()
-      
-   print 'Reading GS1 prods'
-   all_prods = read_prods_from_file(FLAGS.product_file)
-   print 'Mapping prods'
-   all_prods_by_gtin = map_prod_gtin(all_prods)
+   if not FLAGS.ingredient_vocab:
+      print 'Must specify --ingredient_vocab'
+      exit()
+   if not FLAGS.category_vocab:
+      print 'Must specify --category_vocab'
+      exit()
 
-   print 'Reading recipes'
-   all_recipes_list = read_recipes_from_file(FLAGS.recipe_file)
-   print 'Mapping ingred names'
-   recipe_ingred_sets, recipe_id_to_obj, all_categories, all_ingredients = map_ingred_names(all_recipes_list)
-   for (num, cat) in enumerate(all_categories):
-      all_categories_dict[cat] = num
-   for (num, ingred) in enumerate(all_ingredients):
-      all_ingredients_dict[ingred] = num
-   
+   print 'Reading recipe metadata'
+   metadata = read_metadata(FLAGS.recipe_metadata)
+   print 'Reading vocabularies'
+   ingredient_vocab = read_vocab(FLAGS.ingredient_vocab)
+   category_vocab = read_vocab(FLAGS.category_vocab)
+
+   recipe_cache = pylru.lrucache(FLAGS.cache_size)
+      
    print 'Starting request handler'
 
    server_class = BaseHTTPServer.HTTPServer

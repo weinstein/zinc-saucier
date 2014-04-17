@@ -11,7 +11,7 @@ from google.protobuf import descriptor_pb2
 DESCRIPTOR = descriptor.FileDescriptor(
   name='cooking.proto',
   package='zns',
-  serialized_pb='\n\rcooking.proto\x12\x03zns\"d\n\nIngredient\x12\x12\n\namount_low\x18\x01 \x01(\x01\x12\x13\n\x0b\x61mount_high\x18\x02 \x01(\x01\x12\x0c\n\x04unit\x18\x03 \x01(\t\x12\x0c\n\x04name\x18\x04 \x01(\t\x12\x11\n\tprep_note\x18\x05 \x01(\t\"\xd2\x01\n\x06Recipe\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x15\n\rprep_time_min\x18\x02 \x01(\x03\x12\x15\n\rcook_time_min\x18\x03 \x01(\x03\x12\x12\n\nserves_low\x18\x04 \x01(\x01\x12\x13\n\x0bserves_high\x18\x05 \x01(\x01\x12\x13\n\x0bserves_unit\x18\x06 \x01(\t\x12\x12\n\ncategories\x18\x07 \x03(\t\x12$\n\x0bingredients\x18\x08 \x03(\x0b\x32\x0f.zns.Ingredient\x12\x14\n\x0cinstructions\x18\t \x03(\t\"2\n\x0eIngredientList\x12 \n\x07\x65ntries\x18\x01 \x03(\x0b\x32\x0f.zns.Ingredient\"*\n\nRecipeList\x12\x1c\n\x07\x65ntries\x18\x01 \x03(\x0b\x32\x0b.zns.Recipe')
+  serialized_pb='\n\rcooking.proto\x12\x03zns\"r\n\nIngredient\x12\x12\n\namount_low\x18\x01 \x01(\x01\x12\x13\n\x0b\x61mount_high\x18\x02 \x01(\x01\x12\x0c\n\x04unit\x18\x03 \x01(\t\x12\x0c\n\x04name\x18\x04 \x01(\t\x12\x11\n\tprep_note\x18\x05 \x01(\t\x12\x0c\n\x04iden\x18\x06 \x01(\x04\"\xe0\x01\n\x06Recipe\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x15\n\rprep_time_min\x18\x02 \x01(\x03\x12\x15\n\rcook_time_min\x18\x03 \x01(\x03\x12\x12\n\nserves_low\x18\x04 \x01(\x01\x12\x13\n\x0bserves_high\x18\x05 \x01(\x01\x12\x13\n\x0bserves_unit\x18\x06 \x01(\t\x12\x12\n\ncategories\x18\x07 \x03(\t\x12$\n\x0bingredients\x18\x08 \x03(\x0b\x32\x0f.zns.Ingredient\x12\x14\n\x0cinstructions\x18\t \x03(\t\x12\x0c\n\x04iden\x18\n \x01(\x04\"2\n\x0eIngredientList\x12 \n\x07\x65ntries\x18\x01 \x03(\x0b\x32\x0f.zns.Ingredient\"*\n\nRecipeList\x12\x1c\n\x07\x65ntries\x18\x01 \x03(\x0b\x32\x0b.zns.Recipe\"P\n\x0eRecipeMetadata\x12\x0c\n\x04iden\x18\x01 \x01(\x04\x12\x18\n\x10ingredient_vocab\x18\x02 \x03(\t\x12\x16\n\x0e\x63\x61tegory_vocab\x18\x03 \x03(\t\"8\n\x10\x43ookbookMetadata\x12$\n\x07recipes\x18\x01 \x03(\x0b\x32\x13.zns.RecipeMetadata')
 
 
 
@@ -58,6 +58,13 @@ _INGREDIENT = descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
+    descriptor.FieldDescriptor(
+      name='iden', full_name='zns.Ingredient.iden', index=5,
+      number=6, type=4, cpp_type=4, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
   ],
   extensions=[
   ],
@@ -68,7 +75,7 @@ _INGREDIENT = descriptor.Descriptor(
   is_extendable=False,
   extension_ranges=[],
   serialized_start=22,
-  serialized_end=122,
+  serialized_end=136,
 )
 
 
@@ -142,6 +149,13 @@ _RECIPE = descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
+    descriptor.FieldDescriptor(
+      name='iden', full_name='zns.Recipe.iden', index=9,
+      number=10, type=4, cpp_type=4, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
   ],
   extensions=[
   ],
@@ -151,8 +165,8 @@ _RECIPE = descriptor.Descriptor(
   options=None,
   is_extendable=False,
   extension_ranges=[],
-  serialized_start=125,
-  serialized_end=335,
+  serialized_start=139,
+  serialized_end=363,
 )
 
 
@@ -179,8 +193,8 @@ _INGREDIENTLIST = descriptor.Descriptor(
   options=None,
   is_extendable=False,
   extension_ranges=[],
-  serialized_start=337,
-  serialized_end=387,
+  serialized_start=365,
+  serialized_end=415,
 )
 
 
@@ -207,17 +221,90 @@ _RECIPELIST = descriptor.Descriptor(
   options=None,
   is_extendable=False,
   extension_ranges=[],
-  serialized_start=389,
-  serialized_end=431,
+  serialized_start=417,
+  serialized_end=459,
+)
+
+
+_RECIPEMETADATA = descriptor.Descriptor(
+  name='RecipeMetadata',
+  full_name='zns.RecipeMetadata',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    descriptor.FieldDescriptor(
+      name='iden', full_name='zns.RecipeMetadata.iden', index=0,
+      number=1, type=4, cpp_type=4, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+    descriptor.FieldDescriptor(
+      name='ingredient_vocab', full_name='zns.RecipeMetadata.ingredient_vocab', index=1,
+      number=2, type=9, cpp_type=9, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+    descriptor.FieldDescriptor(
+      name='category_vocab', full_name='zns.RecipeMetadata.category_vocab', index=2,
+      number=3, type=9, cpp_type=9, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  options=None,
+  is_extendable=False,
+  extension_ranges=[],
+  serialized_start=461,
+  serialized_end=541,
+)
+
+
+_COOKBOOKMETADATA = descriptor.Descriptor(
+  name='CookbookMetadata',
+  full_name='zns.CookbookMetadata',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    descriptor.FieldDescriptor(
+      name='recipes', full_name='zns.CookbookMetadata.recipes', index=0,
+      number=1, type=11, cpp_type=10, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  options=None,
+  is_extendable=False,
+  extension_ranges=[],
+  serialized_start=543,
+  serialized_end=599,
 )
 
 _RECIPE.fields_by_name['ingredients'].message_type = _INGREDIENT
 _INGREDIENTLIST.fields_by_name['entries'].message_type = _INGREDIENT
 _RECIPELIST.fields_by_name['entries'].message_type = _RECIPE
+_COOKBOOKMETADATA.fields_by_name['recipes'].message_type = _RECIPEMETADATA
 DESCRIPTOR.message_types_by_name['Ingredient'] = _INGREDIENT
 DESCRIPTOR.message_types_by_name['Recipe'] = _RECIPE
 DESCRIPTOR.message_types_by_name['IngredientList'] = _INGREDIENTLIST
 DESCRIPTOR.message_types_by_name['RecipeList'] = _RECIPELIST
+DESCRIPTOR.message_types_by_name['RecipeMetadata'] = _RECIPEMETADATA
+DESCRIPTOR.message_types_by_name['CookbookMetadata'] = _COOKBOOKMETADATA
 
 class Ingredient(message.Message):
   __metaclass__ = reflection.GeneratedProtocolMessageType
@@ -242,5 +329,17 @@ class RecipeList(message.Message):
   DESCRIPTOR = _RECIPELIST
   
   # @@protoc_insertion_point(class_scope:zns.RecipeList)
+
+class RecipeMetadata(message.Message):
+  __metaclass__ = reflection.GeneratedProtocolMessageType
+  DESCRIPTOR = _RECIPEMETADATA
+  
+  # @@protoc_insertion_point(class_scope:zns.RecipeMetadata)
+
+class CookbookMetadata(message.Message):
+  __metaclass__ = reflection.GeneratedProtocolMessageType
+  DESCRIPTOR = _COOKBOOKMETADATA
+  
+  # @@protoc_insertion_point(class_scope:zns.CookbookMetadata)
 
 # @@protoc_insertion_point(module_scope)

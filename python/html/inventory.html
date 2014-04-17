@@ -60,7 +60,7 @@ img {
 
 .page_footer {
    position: absolute;
-   bottom: 0px;
+   top: 0px;
    width: 300px;
    right: 0px;
    float: left;
@@ -109,19 +109,16 @@ body {
 <script>
 
 var ingred_names = new Array();
-var ingred_upcs = new Array();
 var suggested_recipes = new Array();
 var saved_recipes = new Array();
 var disliked_recipes = new Array();
 
 function clear_ingreds() {
    ingred_names = new Array();
-   ingred_upcs = new Array();
    suggested_recipes = new Array();
    saved_recipes = new Array();
    disliked_recipes = new Array();
    document.getElementById("ingred_names_list").innerHTML = "";
-   document.getElementById("ingred_upc_list").innerHTML = "";
    document.getElementById("recipe_suggestions").innerHTML = "";
    document.getElementById("user_input").value = "";
    document.getElementById("saved_recipes").innerHTML = "";
@@ -155,15 +152,15 @@ function redraw_saved_recipes() {
 }
 
 function add_to_inventory(item) {
-   if (isNaN(item)) {
-      for (var i = 0; i < ingred_names.length; ++i) {
-         if (ingred_names[i] === item) {
-            return;
-         }
+   for (var i = 0; i < ingred_names.length; ++i) {
+      if (ingred_names[i] === item) {
+         return;
       }
-      ingred_names.push(item);
-      redraw_ingred_names_list();
-   } else {
+   }
+   ingred_names.push(item);
+   redraw_ingred_names_list();
+}
+function unused() {
       var upc = new Number(item);
       for (var i = 0; i < ingred_upcs.length; ++i) {
          if (ingred_upcs[i] === upc) {
@@ -172,7 +169,6 @@ function add_to_inventory(item) {
       }
       ingred_upcs.push(upc);
       redraw_ingred_upc_list();
-   }
 }
 
 function remove_from_ingred_names(ind) {
@@ -208,7 +204,7 @@ function like_recipe(ind) {
    if (0 <= ind && ind < suggested_recipes.length) {
       var json_recipe = suggested_recipes[ind];
       for (var i = 0; i < saved_recipes.length; ++i) {
-         if (saved_recipes[i].id === json_recipe.id) {
+         if (saved_recipes[i].iden === json_recipe.iden) {
             return;
          }
       }
@@ -223,12 +219,12 @@ function dislike_recipe(ind) {
    if (0 <= ind && ind < suggested_recipes.length) {
       var json_recipe = suggested_recipes[ind];
       for (var i = 0; i < disliked_recipes.length; ++i) {
-         if (disliked_recipes[i].id === json_recipe.id) {
+         if (disliked_recipes[i].iden === json_recipe.iden) {
             return;
          }
       }
       for (var i = 0; i < saved_recipes.length; ++i) {
-         if (saved_recipes[i].id === json_recipe.id) {
+         if (saved_recipes[i].iden === json_recipe.iden) {
             saved_recipes.splice(i, 1);
          }
       }
@@ -253,7 +249,7 @@ function display_suggested_recipes() {
    for (var i = 0; i < suggested_recipes.length; ++i) {
       var json_recipe = suggested_recipes[i];
       html_text += "<div class=\"output_box\"><div class=\"recipe_name label_box\" name=\"" + json_recipe.name + "\">";
-      html_text += "<a href=\"recipe_info?id=" + json_recipe.id + "\">" + json_recipe.name + "</a>";
+      html_text += "<a href=\"recipe_info?id=" + json_recipe.iden + "\">" + json_recipe.name + "</a>";
       html_text += "<a href=\"javascript:dislike_recipe(" + i.toString() + ")\">(-)</a>";
       html_text += "</div>";
       for (var j = 0; j < json_recipe.ingredients.length; ++j) {
@@ -319,7 +315,7 @@ function load_json_prod_info() {
 
 function get_suggestions() {
    update_inventory();
-   load_json_prod_info();
+   load_json_recipes();
 }
 
 function load_json_serendipity() {
@@ -328,10 +324,10 @@ function load_json_serendipity() {
       if (i > 0) {
          path += "&";
       }
-      path += "like=" + saved_recipes[i].id.toString();
+      path += "like=" + saved_recipes[i].iden.toString();
    }
    for (var i = 0; i < disliked_recipes.length; ++i) {
-      path += "&dislike=" + disliked_recipes[i].id.toString();
+      path += "&dislike=" + disliked_recipes[i].iden.toString();
    }
    http_req = new XMLHttpRequest();
    http_req.onreadystatechange = function() {
@@ -353,17 +349,16 @@ function load_json_serendipity() {
 
 <body>
 
-<div class="page_header">
-<img src="bender.png"></img>
-</div>
 
 <table><tr>
 
 <td><div class="label_box">Ingredients</div><div class="output_box"><div id="ingred_names_list">
 </div></div></td>
 
-<td><div class="label_box">UPC Codes</div><div class="output_box"><div id="ingred_upc_list">
-</div></div></td>
+<td>
+<img src="bender.png"></img>
+<!--<div class="label_box">UPC Codes</div><div class="output_box"><div id="ingred_upc_list">
+</div></div>--></td>
 
 </tr></table>
 

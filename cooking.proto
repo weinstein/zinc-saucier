@@ -1,11 +1,14 @@
 package zns;
 
+
 message Ingredient {
    optional double amount_low = 1;
    optional double amount_high = 2;
    optional string unit = 3;
    optional string name = 4;
    optional string prep_note = 5;
+
+   optional uint64 iden = 6;
 }
 
 message Recipe {
@@ -19,6 +22,8 @@ message Recipe {
    repeated string categories = 7;
    repeated Ingredient ingredients = 8;
    repeated string instructions = 9;
+
+   optional uint64 iden = 10;
 }
 
 message IngredientList {
@@ -27,4 +32,14 @@ message IngredientList {
 
 message RecipeList {
    repeated Recipe entries = 1;
+}
+
+message RecipeMetadata {
+   optional uint64 iden = 1;
+   repeated string ingredient_vocab = 2;
+   repeated string category_vocab = 3;
+}
+
+message CookbookMetadata {
+   repeated RecipeMetadata recipes = 1;
 }
